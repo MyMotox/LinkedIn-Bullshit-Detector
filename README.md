@@ -11,22 +11,10 @@ The extension does not call OpenAI directly. It sends profile text to a backend 
 3. The backend calls OpenAI and returns structured JSON.
 4. The popup renders the score, categories, and quotes.
 
-## Security model
-
-- `OPENAI_API_KEY` stays on the server.
-- No API key is stored in extension code.
-- Secret files are ignored by Git.
-
-You will see both `server/.env.example` and `server/.env`:
-
-- `server/.env.example` is a template committed to Git.
-- `server/.env` contains real secrets and must stay private.
-
 ## Daily limits
 
 - Default: 10 analyses per day per client.
 - Elevated: 50 analyses per day with admin password.
-- Password check happens on the backend only (`ADMIN_LIMIT_PASSWORD`).
 
 ## Run locally
 
@@ -52,37 +40,3 @@ ADMIN_LIMIT_PASSWORD=motherlord
 ```bash
 npm start
 ```
-
-Local endpoints:
-
-- `http://localhost:8787/health`
-- `http://localhost:8787/v1/analyze`
-
-## Deploy on Vercel
-
-Serverless handlers are in [api/analyze.js](api/analyze.js) and [api/health.js](api/health.js).
-
-In Vercel project environment variables, set:
-
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL` (optional)
-- `ADMIN_LIMIT_PASSWORD`
-
-After deploy, use:
-
-- `https://your-project.vercel.app/api/health`
-- `https://your-project.vercel.app/api/analyze`
-
-Then set your production API URL in [popup.js](popup.js).
-
-## Load extension in Firefox
-
-1. Go to `about:debugging`.
-2. Open **This Firefox**.
-3. Click **Load Temporary Add-on**.
-4. Select [manifest.json](manifest.json).
-
-## Notes
-
-- The quality of results depends on what LinkedIn content is visible on the page.
-- The scraper filters common LinkedIn UI/system text before analysis.
