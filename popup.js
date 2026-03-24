@@ -1,7 +1,6 @@
 // popup.js — Bullshit-o-Meter v1.3
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-// Local dev URL. For Vercel, replace with: https://YOUR-PROJECT.vercel.app/api/analyze
-const ANALYSIS_API_URL = 'http://localhost:8787/v1/analyze';
+const ANALYSIS_API_URL = 'https://linkedin-bullshit-detector.vercel.app/api/analyze';
 
 const LOADING_MESSAGES = [
   "Extracting profile data...",
@@ -83,24 +82,60 @@ function isLikelyLinkedInUiText(text) {
   const t = (text || '').trim().toLowerCase();
   if (!t) return true;
   const uiPatterns = [
+    /^accueil$/,
+    /^réseau$/,
+    /^emploi$/,
+    /^messagerie$/,
+    /^notifications?$/,
     /^about$/,
+    /^infos?$/,
     /^experience$/,
+    /^expériences?$/,
     /^education$/,
+    /^formation$/,
     /^skills?$/,
+    /^compétences?$/,
     /^activity$/,
+    /^activité$/,
     /^interests?$/,
     /^open to work$/,
+    /^en recherche de travail$/,
+    /^prestataire de services?$/,
     /^connect$/,
+    /^se connecter$/,
     /^follow$/,
+    /^suivre$/,
     /^message$/,
+    /^envoyer un message$/,
     /^see more$/,
+    /^voir plus$/,
     /^show all$/,
+    /^tout afficher$/,
     /^view (profile|full profile)$/,
+    /^voir (le )?profil$/,
+    /^signaler ce profil$/,
+    /^partager (le )?profil$/,
     /^linkedin$/,
     /^people also viewed$/,
+    /^personnes également consultées$/,
+    /^cette personne et vous avez étudié/, 
+    /^cette personne et vous/, 
+    /^vous connaissez peut-?être/, 
+    /^personnes que vous connaissez/, 
+    /^relation de \d(er|e) niveau/,
+    /^\d(st|nd|rd|th) degree connection/,
     /^\d+\+?\s+(followers?|connections?)$/,
+    /^\d+\+?\s+(abonnés?|relations?)$/,
+    /^\d+\s+relations?$/,
+    /^\d+\s+abonnés?$/,
     /^talks about/,
+    /^parle de/,
     /^mutual connections?$/,
+    /^relations en commun$/,
+    /^j['’]?aime$/,
+    /^commenter$/,
+    /^reposter$/,
+    /^republi(er|é)$/,
   ];
   return uiPatterns.some(re => re.test(t));
 }
@@ -311,18 +346,26 @@ async function callSecureAnalyzeApi(profile) {
 // ── Format profile ────────────────────────────────────────────────────────────
 function formatProfile(d) {
   let t = '';
+  if (d.name)     t += `Name: ${d.name}\n`;
   if (d.headline) t += `Job Title: ${d.headline}\n`;
+  if (d.location) t += `Location: ${d.location}\n`;
   if (d.about)    t += `About section: ${d.about}\n`;
   if (d.experiences?.length) {
     t += `Experiences:\n`;
-    d.experiences.slice(0, 6).forEach(e => {
+    d.experiences.slice(0, 12).forEach(e => {
+      t += `- ${typeof e === 'string' ? e : JSON.stringify(e)}\n`;
+    });
+  }
+  if (d.education?.length) {
+    t += `Education:\n`;
+    d.education.slice(0, 8).forEach(e => {
       t += `- ${typeof e === 'string' ? e : JSON.stringify(e)}\n`;
     });
   }
   if (d.skills?.length)  t += `Skills: ${d.skills.slice(0, 20).join(', ')}\n`;
   if (d.posts?.length) {
     t += `Posts:\n`;
-    d.posts.slice(0, 3).forEach((p, i) => { t += `[${i+1}] ${p.substring(0, 400)}\n`; });
+    d.posts.slice(0, 8).forEach((p, i) => { t += `[${i+1}] ${p.substring(0, 600)}\n`; });
   }
   // rawText only as last resort if we have very little data
   if (t.trim().length < 100 && d.rawText) {

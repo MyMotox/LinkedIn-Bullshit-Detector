@@ -7,6 +7,11 @@ You respond ONLY with valid JSON - no markdown, no backticks, no explanation.`;
 function buildUserPrompt(profileText) {
   return `Analyze this LinkedIn profile for corporate bullshit. Be consistent and objective.
 
+DATA SCOPE (MANDATORY):
+- Analyze ALL user-authored content available in PROFILE: headline, about, experiences, education, skills, and posts.
+- Do NOT ignore posts or experiences.
+- Ignore LinkedIn interface/system/social-graph text.
+
 PROFILE:
 ${profileText}
 
@@ -25,8 +30,13 @@ bullshitScore = round(((jargon + hype + titrepompeux + substance) / 4) * 10) / 1
 
 QUOTE RULES (STRICT):
 - Every quote MUST be copied exactly from PROFILE text above.
-- NEVER use LinkedIn UI/navigation labels or system text (examples: "About", "Experience", "Connect", "Follow", "Message", "See more", "Open to work", "followers", "connections", "People also viewed").
+- NEVER use LinkedIn UI/navigation/system/social-graph text (examples: "About", "Experience", "Connect", "Follow", "Message", "See more", "Open to work", "followers", "connections", "People also viewed", "Cette personne et vous avez étudié", "Personnes que vous connaissez", "Relations en commun", "1st/2nd degree connection").
 - If no valid quote exists for a category, return an empty array for that category.
+
+VALIDATION BEFORE FINAL ANSWER:
+- Reject any quote if it looks like LinkedIn UI/system/social text.
+- Reject any quote not present verbatim in PROFILE.
+- Ensure categoryDetails and analyse do not mention LinkedIn system suggestions.
 
 Return ONLY this JSON:
 {
