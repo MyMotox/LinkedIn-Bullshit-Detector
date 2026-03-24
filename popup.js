@@ -1,7 +1,5 @@
-// popup.js — Bullshit-o-Meter v1.3
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-// Local dev URL. For Vercel, replace with: https://YOUR-PROJECT.vercel.app/api/analyze
-const ANALYSIS_API_URL = 'http://localhost:8787/v1/analyze';
+const ANALYSIS_API_URL = 'https://linkedin-bullshit-detector.vercel.app/api/analyze';
 
 const LOADING_MESSAGES = [
   "Extracting profile data...",
@@ -75,7 +73,6 @@ function computeBullshitAverage(subScores = {}) {
   const hype = clampScore(subScores.hype);
   const titrepompeux = clampScore(subScores.titrepompeux);
   const substance = clampScore(subScores.substance);
-  // Simple arithmetic mean of the 4 criteria.
   return Math.round(((jargon + hype + titrepompeux + substance) / 4) * 10) / 10;
 }
 
@@ -83,24 +80,60 @@ function isLikelyLinkedInUiText(text) {
   const t = (text || '').trim().toLowerCase();
   if (!t) return true;
   const uiPatterns = [
+    /^accueil$/,
+    /^réseau$/,
+    /^emploi$/,
+    /^messagerie$/,
+    /^notifications?$/,
     /^about$/,
+    /^infos?$/,
     /^experience$/,
+    /^expériences?$/,
     /^education$/,
+    /^formation$/,
     /^skills?$/,
+    /^compétences?$/,
     /^activity$/,
+    /^activité$/,
     /^interests?$/,
     /^open to work$/,
+    /^en recherche de travail$/,
+    /^prestataire de services?$/,
     /^connect$/,
+    /^se connecter$/,
     /^follow$/,
+    /^suivre$/,
     /^message$/,
+    /^envoyer un message$/,
     /^see more$/,
+    /^voir plus$/,
     /^show all$/,
+    /^tout afficher$/,
     /^view (profile|full profile)$/,
+    /^voir (le )?profil$/,
+    /^signaler ce profil$/,
+    /^partager (le )?profil$/,
     /^linkedin$/,
     /^people also viewed$/,
+    /^personnes également consultées$/,
+    /^cette personne et vous avez étudié/, 
+    /^cette personne et vous/, 
+    /^vous connaissez peut-?être/, 
+    /^personnes que vous connaissez/, 
+    /^relation de \d(er|e) niveau/,
+    /^\d(st|nd|rd|th) degree connection/,
     /^\d+\+?\s+(followers?|connections?)$/,
+    /^\d+\+?\s+(abonnés?|relations?)$/,
+    /^\d+\s+relations?$/,
+    /^\d+\s+abonnés?$/,
     /^talks about/,
+    /^parle de/,
     /^mutual connections?$/,
+    /^relations en commun$/,
+    /^j['’]?aime$/,
+    /^commenter$/,
+    /^reposter$/,
+    /^republi(er|é)$/,
   ];
   return uiPatterns.some(re => re.test(t));
 }
@@ -151,7 +184,6 @@ function normalizeAnalysis(rawAnalysis, profileText) {
   };
 }
 
-// ── DOM refs ──────────────────────────────────────────────────────────────────
 let notLinkedin;
 let mainScreen;
 let profileUrl;
@@ -180,7 +212,6 @@ function cacheDomRefs() {
   copyBtn     = document.getElementById('copy-btn');
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   try {
     if (!notLinkedin || !mainScreen || !profileUrl) {
@@ -197,15 +228,12 @@ async function init() {
       return;
     }
 
-    // Show cleaned URL (e.g. "linkedin.com/in/julescs")
     const cleanUrl = url.replace('https://www.', '').replace('https://', '').split('?')[0].replace(/\/$/, '');
     profileUrl.textContent = cleanUrl;
 
     notLinkedin.style.display = 'none';
     mainScreen.style.display  = 'block';
 
-    // Try to scrape immediately (content script injected by background.js)
-    // Small delay to ensure content script is ready
     setTimeout(async () => {
       try {
         const res = await browserAPI.tabs.sendMessage(currentTab.id, { action: 'scrapeProfile' });
@@ -218,7 +246,6 @@ async function init() {
   }
 }
 
-// ── Send to content script (with auto-inject fallback) ───────────────────────
 async function sendToContent(tabId, msg) {
   try {
     const r = await browserAPI.tabs.sendMessage(tabId, msg);
@@ -233,7 +260,6 @@ async function sendToContent(tabId, msg) {
   }
 }
 
-// ── Analyze button ────────────────────────────────────────────────────────────
 async function handleAnalyzeClick() {
   errorBox.style.display   = 'none';
   resultsDiv.style.display = 'none';
@@ -243,7 +269,6 @@ async function handleAnalyzeClick() {
     currentTab = tabs[0];
   }
 
-  // Always fresh scrape on every analysis click
   try {
     const res = await sendToContent(currentTab.id, { action: 'scrapeProfile' });
     if (res?.success) currentProfileData = res.data;
@@ -271,7 +296,23 @@ async function handleAnalyzeClick() {
   }, 1400);
 
   try {
-    const analysis = await callSecureAnalyzeApi(currentProfileData);
+    let analysis;
+
+    try {
+      analysis = await callSecureAnalyzeApi(currentProfileData);
+    } catch (e) {
+      if (e?.status === 429 && e?.canUpgrade) {
+        const adminPassword = window.prompt('Daily limit reached (10/day). Enter admin password to unlock 50/day:');
+        if (adminPassword && adminPassword.trim()) {
+          analysis = await callSecureAnalyzeApi(currentProfileData, adminPassword.trim());
+        } else {
+          throw e;
+        }
+      } else {
+        throw e;
+      }
+    }
+
     currentAnalysis = analysis;
     clearInterval(interval);
     loadingDiv.style.display = 'none';
@@ -285,53 +326,67 @@ async function handleAnalyzeClick() {
   }
 }
 
-// ── Backend call (OpenAI key stays server-side) ───────────────────────────────
-async function callSecureAnalyzeApi(profile) {
+async function callSecureAnalyzeApi(profile, limitPassword = '') {
   const profileText = formatProfile(profile);
+
+  const payload = {
+    profileText,
+  };
+
+  if (limitPassword) {
+    payload.limitPassword = limitPassword;
+  }
 
   const res = await fetch(ANALYSIS_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      profileText
-    })
+    body: JSON.stringify(payload)
   });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error || err?.message || `HTTP ${res.status}`);
+    const error = new Error(err?.error || err?.message || `HTTP ${res.status}`);
+    error.status = res.status;
+    error.canUpgrade = Boolean(err?.canUpgrade);
+    error.payload = err;
+    throw error;
   }
 
   const data = await res.json();
   return normalizeAnalysis(data, profileText);
 }
 
-// ── Format profile ────────────────────────────────────────────────────────────
 function formatProfile(d) {
   let t = '';
+  if (d.name)     t += `Name: ${d.name}\n`;
   if (d.headline) t += `Job Title: ${d.headline}\n`;
+  if (d.location) t += `Location: ${d.location}\n`;
   if (d.about)    t += `About section: ${d.about}\n`;
   if (d.experiences?.length) {
     t += `Experiences:\n`;
-    d.experiences.slice(0, 6).forEach(e => {
+    d.experiences.slice(0, 12).forEach(e => {
+      t += `- ${typeof e === 'string' ? e : JSON.stringify(e)}\n`;
+    });
+  }
+  if (d.education?.length) {
+    t += `Education:\n`;
+    d.education.slice(0, 8).forEach(e => {
       t += `- ${typeof e === 'string' ? e : JSON.stringify(e)}\n`;
     });
   }
   if (d.skills?.length)  t += `Skills: ${d.skills.slice(0, 20).join(', ')}\n`;
   if (d.posts?.length) {
     t += `Posts:\n`;
-    d.posts.slice(0, 3).forEach((p, i) => { t += `[${i+1}] ${p.substring(0, 400)}\n`; });
+    d.posts.slice(0, 8).forEach((p, i) => { t += `[${i+1}] ${p.substring(0, 600)}\n`; });
   }
-  // rawText only as last resort if we have very little data
   if (t.trim().length < 100 && d.rawText) {
     t += `Page text: ${d.rawText.substring(0, 2000)}`;
   }
   return t.trim();
 }
 
-// ── Render results ────────────────────────────────────────────────────────────
 function renderResults(data) {
   const score   = Number.isFinite(Number(data.bullshitScore)) ? Number(data.bullshitScore) : 0;
   const color   = scoreColor(score);
@@ -352,7 +407,6 @@ function renderResults(data) {
   verdEl.style.background = verdict.bg;
   verdEl.style.color      = verdict.color;
 
-  // Detected phrases
   const phrasesEl = document.getElementById('bs-phrases');
   phrasesEl.innerHTML = '';
   (data.bsPhrases || []).forEach(p => {
@@ -369,7 +423,6 @@ function renderResults(data) {
     phrasesEl.appendChild(empty);
   }
 
-  // Category breakdown
   const sub       = data.subScores       || {};
   const details   = data.categoryDetails || {};
   const quotes    = data.categoryQuotes  || {};
@@ -440,7 +493,6 @@ function renderResults(data) {
   resultsDiv.style.display = 'block';
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function showError(msg) {
   errorBox.textContent   = '⚠️ ' + msg;
   errorBox.style.display = 'block';

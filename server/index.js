@@ -1,12 +1,48 @@
+const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const { timingSafeEqual } = require('crypto');
+require('dotenv').config();
+
+const PORT = Number(process.env.PORT || 8787);
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const BASE_DAILY_LIMIT = 10;
 const ELEVATED_DAILY_LIMIT = 50;
 const usageByDayAndClient = new Map();
 
+if (!OPENAI_API_KEY) {
+  console.error('Missing OPENAI_API_KEY in environment.');
+  process.exit(1);
+}
+
+const app = express();
+
+app.use(helmet());
+app.use(express.json({ limit: '128kb' }));
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (origin.startsWith('moz-extension://') || origin.startsWith('chrome-extension://')) {
+      return callback(null, true);
+    }
+    if (origin === 'http://localhost:8787') return callback(null, true);
+    return callback(new Error('Origin not allowed by CORS'));
+  },
+}));
+
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
+
 const SYSTEM_PROMPT = `You are a deterministic LinkedIn bullshit analyzer.
 Given the same profile, you ALWAYS return the same scores.
-You respond ONLY with valid JSON - no markdown, no backticks, no explanation.`;
+You respond ONLY with valid JSON — no markdown, no backticks, no explanation.`;
 
 function buildUserPrompt(profileText) {
   return `Analyze this LinkedIn profile for corporate bullshit. Be consistent and objective.
@@ -68,15 +104,6 @@ Return ONLY this JSON:
 }`;
 }
 
-function sendJson(res, status, payload) {
-  res.statusCode = status;
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.end(JSON.stringify(payload));
-}
-
 function getUtcDayKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -86,7 +113,7 @@ function getClientId(req) {
   if (typeof xff === 'string' && xff.trim()) {
     return xff.split(',')[0].trim();
   }
-  return req.socket?.remoteAddress || 'unknown-client';
+  return req.ip || req.socket?.remoteAddress || 'unknown-client';
 }
 
 function safeEquals(a, b) {
@@ -104,32 +131,21 @@ function cleanupUsage(currentDay) {
   }
 }
 
-module.exports = async function handler(req, res) {
-  if (req.method === 'OPTIONS') {
-    return sendJson(res, 200, { ok: true });
-  }
+app.get('/health', (_req, res) => {
+  res.json({ ok: true });
+});
 
-  if (req.method !== 'POST') {
-    return sendJson(res, 405, { error: 'Method not allowed' });
-  }
-
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return sendJson(res, 500, { error: 'Missing OPENAI_API_KEY on server' });
-  }
-
+app.post('/v1/analyze', async (req, res) => {
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-    const profileText = String(body.profileText || '').trim();
-    const providedPassword = String(body.limitPassword || '').trim();
+    const profileText = String(req.body?.profileText || '').trim();
+    const providedPassword = String(req.body?.limitPassword || '').trim();
     const adminPassword = String(process.env.ADMIN_LIMIT_PASSWORD || '').trim();
 
     if (!profileText || profileText.length < 20) {
-      return sendJson(res, 400, { error: 'profileText is required and must contain enough data' });
+      return res.status(400).json({ error: 'profileText is required and must contain enough data' });
     }
-
     if (profileText.length > 12000) {
-      return sendJson(res, 400, { error: 'profileText is too large' });
+      return res.status(400).json({ error: 'profileText is too large' });
     }
 
     const hasAdminPassword = adminPassword.length > 0;
@@ -144,7 +160,7 @@ module.exports = async function handler(req, res) {
     const usedToday = usageByDayAndClient.get(usageKey) || 0;
 
     if (usedToday >= limit) {
-      return sendJson(res, 429, {
+      return res.status(429).json({
         error: `Daily limit reached (${limit}/day).`,
         canUpgrade: hasAdminPassword && !isElevated,
         usedToday,
@@ -156,7 +172,7 @@ module.exports = async function handler(req, res) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
         model: OPENAI_MODEL,
@@ -174,24 +190,24 @@ module.exports = async function handler(req, res) {
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       const message = err?.error?.message || `OpenAI HTTP ${response.status}`;
-      return sendJson(res, 502, { error: message });
+      return res.status(502).json({ error: message });
     }
 
     const payload = await response.json();
-    const content = payload?.choices?.[0]?.message?.content || '';
+    const text = payload?.choices?.[0]?.message?.content || '';
 
     let analysis;
     try {
-      analysis = JSON.parse(content);
+      analysis = JSON.parse(text);
     } catch (_e) {
-      const match = content.match(/\{[\s\S]*\}/);
-      if (!match) return sendJson(res, 502, { error: 'Invalid JSON returned by model' });
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) return res.status(502).json({ error: 'Invalid JSON returned by model' });
       analysis = JSON.parse(match[0]);
     }
 
     usageByDayAndClient.set(usageKey, usedToday + 1);
 
-    return sendJson(res, 200, {
+    return res.json({
       ...analysis,
       usage: {
         usedToday: usedToday + 1,
@@ -199,6 +215,10 @@ module.exports = async function handler(req, res) {
       },
     });
   } catch (error) {
-    return sendJson(res, 500, { error: error.message || 'Internal server error' });
+    return res.status(500).json({ error: error.message || 'Internal server error' });
   }
-};
+});
+
+app.listen(PORT, () => {
+  console.log(`Secure API listening on http://localhost:${PORT}`);
+});

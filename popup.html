@@ -48,7 +48,6 @@
   .logo span { color: var(--accent2); }
   .version-badge { font-size: 9px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 2px 8px; border-radius: 100px; }
 
-  /* Not on LinkedIn */
   #not-linkedin { display: none; padding: 32px 20px; text-align: center; }
   .nl-icon  { font-size: 36px; margin-bottom: 10px; }
   .nl-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 13px; margin-bottom: 6px; }
@@ -59,10 +58,8 @@
     font-family: 'Syne', sans-serif; font-weight: 700; font-size: 11px; text-decoration: none;
   }
 
-  /* Main */
   #main-screen { display: none; padding: 13px 16px 16px; }
 
-  /* Profile URL bar */
   .profile-url-bar {
     display: flex;
     align-items: center;
@@ -84,7 +81,6 @@
     flex: 1;
   }
 
-  /* Analyze button */
   .analyze-btn {
     width: 100%;
     background: linear-gradient(135deg, var(--accent), #1d4ed8);
@@ -102,7 +98,6 @@
   .analyze-btn:hover    { opacity: 0.88; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(59,130,246,0.35); }
   .analyze-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
 
-  /* Error */
   .error-box {
     background: rgba(239,68,68,0.08);
     border: 1px solid rgba(239,68,68,0.25);
@@ -116,12 +111,10 @@
     word-break: break-word;
   }
 
-  /* Loading */
   #loading { display: none; padding: 18px 0; text-align: center; }
   .loading-icon { font-size: 28px; animation: spin 0.9s linear infinite; display: block; margin-bottom: 8px; }
   .loading-text { color: var(--muted); font-size: 10px; animation: blink 1.2s ease infinite; }
 
-  /* Results */
   #results { display: none; margin-top: 13px; }
 
   .meter-container {
@@ -141,11 +134,9 @@
   .section-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 7px; display: flex; align-items: center; gap: 6px; }
   .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
-  /* BS phrases */
   .bullshit-phrases { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
   .bs-tag { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.25); color: var(--accent2); padding: 3px 8px; border-radius: 4px; font-size: 10px; font-style: italic; word-break: break-word; max-width: 100%; }
 
-  /* Breakdown */
   .breakdown { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
   .bk-item { padding: 10px 12px; border-bottom: 1px solid var(--border); }
   .bk-item:last-child { border-bottom: none; }
@@ -156,21 +147,17 @@
   .bk-bar { height: 100%; border-radius: 100px; transition: width 1s ease; }
   .bk-desc { font-size: 10px; color: var(--muted); line-height: 1.65; margin-bottom: 7px; word-break: break-word; }
 
-  /* Real quotes from profile */
   .bk-quotes { display: flex; flex-direction: column; gap: 4px; }
   .quote-tag { background: var(--surface2); border-left: 2px solid var(--accent); color: var(--accent2); padding: 4px 8px; font-size: 10px; font-style: italic; line-height: 1.5; word-break: break-word; }
 
-  /* AI verdict */
   .analysis-box { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 11px 12px; font-size: 11px; line-height: 1.75; color: #335f8f; margin-bottom: 11px; word-break: break-word; }
 
-  /* Actions */
   .actions { display: flex; gap: 7px; padding-bottom: 2px; }
   .action-btn { flex: 1; padding: 8px; border-radius: 6px; font-family: 'Space Mono', monospace; font-size: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border); background: var(--surface); color: var(--text); white-space: nowrap; }
   .action-btn:hover { border-color: var(--accent); color: var(--accent2); }
   .action-btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
   .action-btn.primary:hover { background: #2563eb; }
 
-  /* Footer */
   .footer { padding: 7px 16px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; bottom: 0; background: var(--bg); }
   .footer-text { font-size: 9px; color: var(--muted); }
   .footer-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }

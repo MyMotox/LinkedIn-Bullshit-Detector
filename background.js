@@ -1,4 +1,3 @@
-// background.js — pre-injects content script when LinkedIn profile loads
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 
 browserAPI.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
