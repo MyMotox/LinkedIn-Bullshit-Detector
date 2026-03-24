@@ -362,7 +362,11 @@ function renderResults(data) {
     phrasesEl.appendChild(tag);
   });
   if (!data.bsPhrases?.length) {
-    phrasesEl.innerHTML = '<span style="color:var(--muted);font-size:10px">No bullshit phrases detected 🎉</span>';
+    const empty = document.createElement('span');
+    empty.style.color = 'var(--muted)';
+    empty.style.fontSize = '10px';
+    empty.textContent = 'No bullshit phrases detected 🎉';
+    phrasesEl.appendChild(empty);
   }
 
   // Category breakdown
@@ -379,17 +383,52 @@ function renderResults(data) {
 
     const item = document.createElement('div');
     item.className = 'bk-item';
-    item.innerHTML = `
-      <div class="bk-row">
-        <div class="bk-cat">${cat.icon} ${cat.label}</div>
-        <div class="bk-score" style="color:${c}">${raw}%</div>
-      </div>
-      <div class="bk-bar-wrap">
-        <div class="bk-bar" id="bar-${key}" style="width:0%;background:${c}"></div>
-      </div>
-      <div class="bk-desc">${details[key] || cat.desc}</div>
-      ${catQuotes.length ? `<div class="bk-quotes">${catQuotes.slice(0, 2).map(q => `<div class="quote-tag">"${q}"</div>`).join('')}</div>` : ''}
-    `;
+
+    const row = document.createElement('div');
+    row.className = 'bk-row';
+
+    const catEl = document.createElement('div');
+    catEl.className = 'bk-cat';
+    catEl.textContent = `${cat.icon} ${cat.label}`;
+
+    const scoreEl = document.createElement('div');
+    scoreEl.className = 'bk-score';
+    scoreEl.style.color = c;
+    scoreEl.textContent = `${raw}%`;
+
+    row.appendChild(catEl);
+    row.appendChild(scoreEl);
+
+    const barWrap = document.createElement('div');
+    barWrap.className = 'bk-bar-wrap';
+
+    const bar = document.createElement('div');
+    bar.className = 'bk-bar';
+    bar.id = `bar-${key}`;
+    bar.style.width = '0%';
+    bar.style.background = c;
+    barWrap.appendChild(bar);
+
+    const desc = document.createElement('div');
+    desc.className = 'bk-desc';
+    desc.textContent = details[key] || cat.desc;
+
+    item.appendChild(row);
+    item.appendChild(barWrap);
+    item.appendChild(desc);
+
+    if (catQuotes.length) {
+      const quotesWrap = document.createElement('div');
+      quotesWrap.className = 'bk-quotes';
+      catQuotes.slice(0, 2).forEach((q) => {
+        const quoteTag = document.createElement('div');
+        quoteTag.className = 'quote-tag';
+        quoteTag.textContent = `"${q}"`;
+        quotesWrap.appendChild(quoteTag);
+      });
+      item.appendChild(quotesWrap);
+    }
+
     container.appendChild(item);
     setTimeout(() => {
       const bar = document.getElementById(`bar-${key}`);
