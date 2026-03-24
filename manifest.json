@@ -1,0 +1,44 @@
+{
+  "manifest_version": 2,
+  "name": "LinkedIn Bullshit-o-Meter",
+  "version": "1.3.0",
+  "description": "Analyzes LinkedIn profiles and detects corporate bullshit levels using AI.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "bullshit-meter@extension.dev",
+      "strict_min_version": "91.0"
+    }
+  },
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "https://www.linkedin.com/*",
+    "http://localhost:8787/*",
+    "https://*.vercel.app/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "browser_action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16":  "icons/icon16.png",
+      "48":  "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "Bullshit-o-Meter"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.linkedin.com/in/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16":  "icons/icon16.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
