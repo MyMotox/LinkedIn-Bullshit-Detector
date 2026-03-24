@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bullshit-o-Meter</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f2f7fd;
+    --surface: #ffffff;
+    --surface2: #eaf1fb;
+    --border: #c4d5ea;
+    --accent: #0d67cc;
+    --accent2: #1b4f8f;
+    --text: #152841;
+    --muted: #587193;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 400px;
+    max-height: 580px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  body::-webkit-scrollbar { width: 4px; }
+  body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+  }
+  .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 14px; letter-spacing: -0.03em; }
+  .logo span { color: var(--accent2); }
+  .version-badge { font-size: 9px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 2px 8px; border-radius: 100px; }
+
+  /* Not on LinkedIn */
+  #not-linkedin { display: none; padding: 32px 20px; text-align: center; }
+  .nl-icon  { font-size: 36px; margin-bottom: 10px; }
+  .nl-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 13px; margin-bottom: 6px; }
+  .nl-sub   { color: var(--muted); font-size: 10px; line-height: 1.7; }
+  .linkedin-link {
+    display: inline-block; margin-top: 14px; padding: 8px 18px;
+    background: #0077B5; color: white; border-radius: 6px;
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 11px; text-decoration: none;
+  }
+
+  /* Main */
+  #main-screen { display: none; padding: 13px 16px 16px; }
+
+  /* Profile URL bar */
+  .profile-url-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 11px;
+    overflow: hidden;
+  }
+  .url-icon { font-size: 14px; flex-shrink: 0; }
+  .profile-url {
+    font-size: 10px;
+    color: var(--accent2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+  }
+
+  /* Analyze button */
+  .analyze-btn {
+    width: 100%;
+    background: linear-gradient(135deg, var(--accent), #1d4ed8);
+    border: none;
+    border-radius: 6px;
+    padding: 11px;
+    color: white;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 13px;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: all 0.2s;
+  }
+  .analyze-btn:hover    { opacity: 0.88; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(59,130,246,0.35); }
+  .analyze-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* Error */
+  .error-box {
+    background: rgba(239,68,68,0.08);
+    border: 1px solid rgba(239,68,68,0.25);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-top: 10px;
+    font-size: 11px;
+    color: #b91c1c;
+    display: none;
+    line-height: 1.6;
+    word-break: break-word;
+  }
+
+  /* Loading */
+  #loading { display: none; padding: 18px 0; text-align: center; }
+  .loading-icon { font-size: 28px; animation: spin 0.9s linear infinite; display: block; margin-bottom: 8px; }
+  .loading-text { color: var(--muted); font-size: 10px; animation: blink 1.2s ease infinite; }
+
+  /* Results */
+  #results { display: none; margin-top: 13px; }
+
+  .meter-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 13px;
+    margin-bottom: 10px;
+  }
+  .meter-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 9px; }
+  .meter-label { font-family: 'Syne', sans-serif; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+  .meter-score { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 26px; line-height: 1; }
+  .meter-track { width: 100%; height: 7px; background: var(--surface2); border-radius: 100px; overflow: hidden; margin-bottom: 9px; }
+  .meter-fill  { height: 100%; border-radius: 100px; width: 0%; transition: width 1.2s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  .meter-verdict { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 14px; text-align: center; padding: 7px; border-radius: 4px; }
+
+  .section-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 7px; display: flex; align-items: center; gap: 6px; }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* BS phrases */
+  .bullshit-phrases { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+  .bs-tag { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.25); color: var(--accent2); padding: 3px 8px; border-radius: 4px; font-size: 10px; font-style: italic; word-break: break-word; max-width: 100%; }
+
+  /* Breakdown */
+  .breakdown { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
+  .bk-item { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .bk-item:last-child { border-bottom: none; }
+  .bk-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+  .bk-cat { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 11px; display: flex; align-items: center; gap: 5px; }
+  .bk-score { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+  .bk-bar-wrap { height: 3px; background: var(--surface2); border-radius: 100px; overflow: hidden; margin-bottom: 7px; }
+  .bk-bar { height: 100%; border-radius: 100px; transition: width 1s ease; }
+  .bk-desc { font-size: 10px; color: var(--muted); line-height: 1.65; margin-bottom: 7px; word-break: break-word; }
+
+  /* Real quotes from profile */
+  .bk-quotes { display: flex; flex-direction: column; gap: 4px; }
+  .quote-tag { background: var(--surface2); border-left: 2px solid var(--accent); color: var(--accent2); padding: 4px 8px; font-size: 10px; font-style: italic; line-height: 1.5; word-break: break-word; }
+
+  /* AI verdict */
+  .analysis-box { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 11px 12px; font-size: 11px; line-height: 1.75; color: #335f8f; margin-bottom: 11px; word-break: break-word; }
+
+  /* Actions */
+  .actions { display: flex; gap: 7px; padding-bottom: 2px; }
+  .action-btn { flex: 1; padding: 8px; border-radius: 6px; font-family: 'Space Mono', monospace; font-size: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border); background: var(--surface); color: var(--text); white-space: nowrap; }
+  .action-btn:hover { border-color: var(--accent); color: var(--accent2); }
+  .action-btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+  .action-btn.primary:hover { background: #2563eb; }
+
+  /* Footer */
+  .footer { padding: 7px 16px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; bottom: 0; background: var(--bg); }
+  .footer-text { font-size: 9px; color: var(--muted); }
+  .footer-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+
+  @keyframes spin   { to { transform: rotate(360deg); } }
+  @keyframes pulse  { 0%,100% { opacity: 1; } 50% { opacity: 0.2; } }
+  @keyframes blink  { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-in { animation: fadeIn 0.35s ease both; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">💩 Bullshit<span>-o-</span>Meter</div>
+  <div class="version-badge">v1.3</div>
+</div>
+
+<div id="not-linkedin">
+  <div class="nl-icon">🔍</div>
+  <div class="nl-title">Navigate to a LinkedIn profile</div>
+  <div class="nl-sub">
+    This extension only works on<br>
+    <strong>linkedin.com/in/[profile]</strong> pages
+  </div>
+  <a href="https://www.linkedin.com" target="_blank" class="linkedin-link">Open LinkedIn →</a>
+</div>
+
+<div id="main-screen">
+
+  <div class="profile-url-bar">
+    <span class="url-icon">🔗</span>
+    <span class="profile-url" id="profile-url">linkedin.com/in/...</span>
+  </div>
+
+  <button class="analyze-btn" id="analyze-btn">💩 Detect Bullshit</button>
+
+  <div class="error-box" id="error-box"></div>
+
+  <div id="loading">
+    <span class="loading-icon">🔬</span>
+    <div class="loading-text" id="loading-text">Extracting profile...</div>
+  </div>
+
+  <div id="results" class="fade-in">
+
+    <div class="meter-container">
+      <div class="meter-header">
+        <div class="meter-label">💩 Overall Bullshit Score</div>
+        <div class="meter-score" id="main-score">0%</div>
+      </div>
+      <div class="meter-track">
+        <div class="meter-fill" id="meter-fill"></div>
+      </div>
+      <div class="meter-verdict" id="meter-verdict"></div>
+    </div>
+
+    <div class="section-label">Detected Buzzwords & Phrases</div>
+    <div class="bullshit-phrases" id="bs-phrases"></div>
+
+    <div class="section-label">Category Breakdown</div>
+    <div class="breakdown" id="breakdown-container"></div>
+
+    <div class="section-label">AI Verdict</div>
+    <div class="analysis-box" id="analysis-text"></div>
+
+    <div class="actions">
+      <button class="action-btn" id="reset-btn">↩ Re-analyze</button>
+      <button class="action-btn primary" id="copy-btn">📋 Copy Report</button>
+    </div>
+
+  </div>
+</div>
+
+<div class="footer">
+  <div class="footer-text">linkedin bullshit-o-meter</div>
+  <div class="footer-dot"></div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
