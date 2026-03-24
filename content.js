@@ -1,7 +1,4 @@
-// Compatibilité Firefox/Chrome
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-
-// content.js — Injecté sur linkedin.com/in/*
 
 function isLinkedInUiLine(line) {
   const t = (line || '').trim().toLowerCase();
@@ -106,9 +103,6 @@ function pickMeaningfulLines(text, minLineLength = 10, maxLen = 600) {
 function scrapeProfile() {
   const data = {};
 
-  // ── Approche robuste : sélecteurs multiples avec fallbacks ────────────
-
-  // NOM — plusieurs sélecteurs possibles selon version LinkedIn
   const nameSelectors = [
     'h1.text-heading-xlarge',
     'h1.inline.t-24',
@@ -126,7 +120,6 @@ function scrapeProfile() {
     }
   }
 
-  // HEADLINE
   const headlineSelectors = [
     '.text-body-medium.break-words',
     '.pv-text-details__left-panel .text-body-medium',
@@ -144,7 +137,6 @@ function scrapeProfile() {
     }
   }
 
-  // LOCALISATION
   const locSelectors = [
     '.text-body-small.inline.t-black--light.break-words',
     '.pv-text-details__left-panel span.text-body-small',
@@ -161,8 +153,6 @@ function scrapeProfile() {
     }
   }
 
-  // ── Scrape générique par sections ────────────────────────────────────
-  // LinkedIn change souvent ses classes — on travaille sur le texte brut des sections
   const allSections = document.querySelectorAll('section.artdeco-card, section[data-view-name], div[data-view-name="profile-card"]');
 
   data.about = '';
@@ -181,7 +171,6 @@ function scrapeProfile() {
     }
 
     if (heading.includes('expérience') || heading.includes('experience')) {
-      // Extrait les items de liste ou blocs répétés
       const items = section.querySelectorAll('li, .pvs-list__item--line-separated');
       if (items.length) {
         items.forEach(item => {
@@ -226,22 +215,16 @@ function scrapeProfile() {
     }
   });
 
-  // ── Fallback : si les sections n'ont rien donné, scrape tout le texte ──
-  // Très utile pour les nouvelles versions du DOM LinkedIn
   if (!data.name) {
-    // Dernier recours — premier h1 de la page
     data.name = sanitizeTextBlock(document.querySelector('h1')?.innerText || '', 120) || 'Inconnu';
   }
 
   if (!data.headline && !data.about) {
-    // Scrape le bloc principal de texte du profil
     const mainContent = document.querySelector('main') || document.body;
     const rawText = mainContent.innerText || '';
-    // Prend les 2000 premiers caractères comme contexte général
     data.rawText = sanitizeTextBlock(rawText, 2000);
   }
 
-  // ── Posts récents visibles sur la page ───────────────────────────────
   const legacyPosts = [];
   const postSelectors = [
     '.feed-shared-update-v2__description',
@@ -269,7 +252,6 @@ function scrapeProfile() {
   return data;
 }
 
-// Écoute les messages du popup
 browserAPI.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'scrapeProfile') {
     try {

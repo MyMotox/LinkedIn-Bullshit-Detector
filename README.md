@@ -1,84 +1,88 @@
-# 💩 LinkedIn Bullshit-o-Meter — Extension Firefox
+# LinkedIn Bullshit Detector
 
-Analyse les profils LinkedIn et détecte le niveau de bullshit corporate.
+This Firefox extension reads a LinkedIn profile and scores how buzzword-heavy it is. It looks at headline, about section, experience, education, skills, and visible posts, then returns a detailed breakdown.
 
-## Architecture sécurisée (clé OpenAI non exposée)
+The extension does not call OpenAI directly. It sends profile text to a backend endpoint, and the backend calls OpenAI using a server-side key.
 
-La clé OpenAI n'est **plus dans l'extension**. L'extension appelle un backend local/serveur, et le backend seul appelle OpenAI.
+## How it works
 
-Flux:
-1. Extension Firefox -> POST http://localhost:8787/v1/analyze
-2. Backend Node.js -> OpenAI API (avec OPENAI_API_KEY en variable d'environnement)
-3. Backend -> Extension (résultat JSON)
+1. The extension scrapes profile content from LinkedIn.
+2. It sends cleaned profile text to an API endpoint.
+3. The backend calls OpenAI and returns structured JSON.
+4. The popup renders the score, categories, and quotes.
 
-Important:
-- Une clé API ne peut jamais être "inaccessible par personne" si elle est embarquée côté client.
-- Cette architecture est la bonne pratique: clé uniquement côté serveur.
+## Security model
 
-## Pourquoi `.env.example` et `.env` ?
+- `OPENAI_API_KEY` stays on the server.
+- No API key is stored in extension code.
+- Secret files are ignored by Git.
 
-- `.env.example`:
-   - Template versionné (sans secret) pour montrer quelles variables sont nécessaires.
-- `.env`:
-   - Fichier local avec les vraies valeurs secrètes (ne doit jamais être commit).
+You will see both `server/.env.example` and `server/.env`:
 
-Dans ce repo, `.env` et `server/.env` sont ignorés via [.gitignore](.gitignore).
+- `server/.env.example` is a template committed to Git.
+- `server/.env` contains real secrets and must stay private.
 
-## Installation Firefox (mode développeur)
+## Daily limits
 
-### Méthode temporaire (test rapide)
-1. Ouvre Firefox → tape `about:debugging` dans la barre d'adresse
-2. Clique **"Ce Firefox"** → **"Charger un module temporaire"**
-3. Sélectionne le fichier `manifest.json` dans le dossier
-4. L'extension est active jusqu'au prochain redémarrage de Firefox
+- Default: 10 analyses per day per client.
+- Elevated: 50 analyses per day with admin password.
+- Password check happens on the backend only (`ADMIN_LIMIT_PASSWORD`).
 
-### Méthode permanente (Firefox Developer Edition)
-1. Ouvre Firefox Developer Edition
-2. Va sur `about:config` → passe `xpinstall.signatures.required` à `false`
-3. Va sur `about:addons` → engrenage → "Installer depuis un fichier"
-4. Renomme le ZIP en `.xpi` et sélectionne-le
+## Run locally
 
-## Setup backend sécurisé
+1. Open a terminal in [server](server).
+2. Install dependencies:
 
-Le backend est dans [server/index.js](server/index.js).
+```bash
+npm install
+```
 
-1. Ouvre un terminal dans [server](server)
-2. Installe les dépendances:
-   - npm install
-3. Crée ton fichier .env depuis [.env.example](server/.env.example)
-4. Renseigne OPENAI_API_KEY dans .env
-5. Démarre le backend:
-   - npm start
+3. Create a local env file from the template.
+4. Set at least:
 
-Le service écoute sur http://localhost:8787
+```env
+OPENAI_API_KEY=your_key_here
+OPENAI_MODEL=gpt-4o-mini
+PORT=8787
+ADMIN_LIMIT_PASSWORD=motherlord
+```
 
-## Déployer sur Vercel
+5. Start the local API:
 
-1. Push le repo sur GitHub.
-2. Dans Vercel, import le repo.
-3. Dans `Project Settings > Environment Variables`, ajoute:
-   - `OPENAI_API_KEY`
-   - Optionnel: `OPENAI_MODEL` (ex: `gpt-4o-mini`)
-4. Déploie.
-5. Vérifie les endpoints Vercel:
-   - `https://TON-PROJET.vercel.app/api/health`
-   - `https://TON-PROJET.vercel.app/api/analyze`
-6. Mets à jour l'URL backend utilisée par l'extension dans [popup.js](popup.js):
-   - Remplace `http://localhost:8787/v1/analyze`
-   - Par `https://TON-PROJET.vercel.app/api/analyze`
-7. Recharge l'extension dans Firefox (`about:debugging`).
+```bash
+npm start
+```
 
-Les fonctions serverless Vercel sont dans:
-- [api/analyze.js](api/analyze.js)
-- [api/health.js](api/health.js)
+Local endpoints:
 
-## Première utilisation extension
+- `http://localhost:8787/health`
+- `http://localhost:8787/v1/analyze`
 
-1. Clique sur l'icône 💩 dans la barre d'outils
-2. Vérifie que le backend tourne (http://localhost:8787/health)
-3. Navigue sur un profil LinkedIn (`linkedin.com/in/quelquun`)
-4. Clique sur "Analyser le Bullshit"
+## Deploy on Vercel
 
-## Coût
+Serverless handlers are in [api/analyze.js](api/analyze.js) and [api/health.js](api/health.js).
 
-Modèle : GPT-3.5-turbo — ~0.002€ par analyse. 1000 analyses ≈ 2€
+In Vercel project environment variables, set:
+
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL` (optional)
+- `ADMIN_LIMIT_PASSWORD`
+
+After deploy, use:
+
+- `https://your-project.vercel.app/api/health`
+- `https://your-project.vercel.app/api/analyze`
+
+Then set your production API URL in [popup.js](popup.js).
+
+## Load extension in Firefox
+
+1. Go to `about:debugging`.
+2. Open **This Firefox**.
+3. Click **Load Temporary Add-on**.
+4. Select [manifest.json](manifest.json).
+
+## Notes
+
+- The quality of results depends on what LinkedIn content is visible on the page.
+- The scraper filters common LinkedIn UI/system text before analysis.

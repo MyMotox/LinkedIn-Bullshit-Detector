@@ -1,4 +1,8 @@
+const { timingSafeEqual } = require('crypto');
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const BASE_DAILY_LIMIT = 10;
+const ELEVATED_DAILY_LIMIT = 50;
+const usageByDayAndClient = new Map();
 
 const SYSTEM_PROMPT = `You are a deterministic LinkedIn bullshit analyzer.
 Given the same profile, you ALWAYS return the same scores.
@@ -73,6 +77,33 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function getUtcDayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getClientId(req) {
+  const xff = req.headers['x-forwarded-for'];
+  if (typeof xff === 'string' && xff.trim()) {
+    return xff.split(',')[0].trim();
+  }
+  return req.socket?.remoteAddress || 'unknown-client';
+}
+
+function safeEquals(a, b) {
+  const aBuf = Buffer.from(a || '', 'utf8');
+  const bBuf = Buffer.from(b || '', 'utf8');
+  if (aBuf.length !== bBuf.length || aBuf.length === 0) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
+
+function cleanupUsage(currentDay) {
+  for (const key of usageByDayAndClient.keys()) {
+    if (!key.startsWith(`${currentDay}:`)) {
+      usageByDayAndClient.delete(key);
+    }
+  }
+}
+
 module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     return sendJson(res, 200, { ok: true });
@@ -90,6 +121,8 @@ module.exports = async function handler(req, res) {
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
     const profileText = String(body.profileText || '').trim();
+    const providedPassword = String(body.limitPassword || '').trim();
+    const adminPassword = String(process.env.ADMIN_LIMIT_PASSWORD || '').trim();
 
     if (!profileText || profileText.length < 20) {
       return sendJson(res, 400, { error: 'profileText is required and must contain enough data' });
@@ -97,6 +130,26 @@ module.exports = async function handler(req, res) {
 
     if (profileText.length > 12000) {
       return sendJson(res, 400, { error: 'profileText is too large' });
+    }
+
+    const hasAdminPassword = adminPassword.length > 0;
+    const isElevated = hasAdminPassword && safeEquals(providedPassword, adminPassword);
+    const limit = isElevated ? ELEVATED_DAILY_LIMIT : BASE_DAILY_LIMIT;
+
+    const day = getUtcDayKey();
+    const clientId = getClientId(req);
+    cleanupUsage(day);
+
+    const usageKey = `${day}:${clientId}`;
+    const usedToday = usageByDayAndClient.get(usageKey) || 0;
+
+    if (usedToday >= limit) {
+      return sendJson(res, 429, {
+        error: `Daily limit reached (${limit}/day).`,
+        canUpgrade: hasAdminPassword && !isElevated,
+        usedToday,
+        dailyLimit: limit,
+      });
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -136,7 +189,15 @@ module.exports = async function handler(req, res) {
       analysis = JSON.parse(match[0]);
     }
 
-    return sendJson(res, 200, analysis);
+    usageByDayAndClient.set(usageKey, usedToday + 1);
+
+    return sendJson(res, 200, {
+      ...analysis,
+      usage: {
+        usedToday: usedToday + 1,
+        dailyLimit: limit,
+      },
+    });
   } catch (error) {
     return sendJson(res, 500, { error: error.message || 'Internal server error' });
   }

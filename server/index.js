@@ -2,11 +2,15 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const { timingSafeEqual } = require('crypto');
 require('dotenv').config();
 
 const PORT = Number(process.env.PORT || 8787);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const BASE_DAILY_LIMIT = 10;
+const ELEVATED_DAILY_LIMIT = 50;
+const usageByDayAndClient = new Map();
 
 if (!OPENAI_API_KEY) {
   console.error('Missing OPENAI_API_KEY in environment.');
@@ -18,7 +22,6 @@ const app = express();
 app.use(helmet());
 app.use(express.json({ limit: '128kb' }));
 
-// Browser extension requests often have moz-extension:// or chrome-extension:// origins.
 app.use(cors({
   origin(origin, callback) {
     if (!origin) return callback(null, true);
@@ -101,6 +104,33 @@ Return ONLY this JSON:
 }`;
 }
 
+function getUtcDayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getClientId(req) {
+  const xff = req.headers['x-forwarded-for'];
+  if (typeof xff === 'string' && xff.trim()) {
+    return xff.split(',')[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || 'unknown-client';
+}
+
+function safeEquals(a, b) {
+  const aBuf = Buffer.from(a || '', 'utf8');
+  const bBuf = Buffer.from(b || '', 'utf8');
+  if (aBuf.length !== bBuf.length || aBuf.length === 0) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
+
+function cleanupUsage(currentDay) {
+  for (const key of usageByDayAndClient.keys()) {
+    if (!key.startsWith(`${currentDay}:`)) {
+      usageByDayAndClient.delete(key);
+    }
+  }
+}
+
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
@@ -108,11 +138,34 @@ app.get('/health', (_req, res) => {
 app.post('/v1/analyze', async (req, res) => {
   try {
     const profileText = String(req.body?.profileText || '').trim();
+    const providedPassword = String(req.body?.limitPassword || '').trim();
+    const adminPassword = String(process.env.ADMIN_LIMIT_PASSWORD || '').trim();
+
     if (!profileText || profileText.length < 20) {
       return res.status(400).json({ error: 'profileText is required and must contain enough data' });
     }
     if (profileText.length > 12000) {
       return res.status(400).json({ error: 'profileText is too large' });
+    }
+
+    const hasAdminPassword = adminPassword.length > 0;
+    const isElevated = hasAdminPassword && safeEquals(providedPassword, adminPassword);
+    const limit = isElevated ? ELEVATED_DAILY_LIMIT : BASE_DAILY_LIMIT;
+
+    const day = getUtcDayKey();
+    const clientId = getClientId(req);
+    cleanupUsage(day);
+
+    const usageKey = `${day}:${clientId}`;
+    const usedToday = usageByDayAndClient.get(usageKey) || 0;
+
+    if (usedToday >= limit) {
+      return res.status(429).json({
+        error: `Daily limit reached (${limit}/day).`,
+        canUpgrade: hasAdminPassword && !isElevated,
+        usedToday,
+        dailyLimit: limit,
+      });
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -152,7 +205,15 @@ app.post('/v1/analyze', async (req, res) => {
       analysis = JSON.parse(match[0]);
     }
 
-    return res.json(analysis);
+    usageByDayAndClient.set(usageKey, usedToday + 1);
+
+    return res.json({
+      ...analysis,
+      usage: {
+        usedToday: usedToday + 1,
+        dailyLimit: limit,
+      },
+    });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Internal server error' });
   }
