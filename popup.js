@@ -3,6 +3,9 @@ const ANALYSIS_API_URLS = [
   'https://linkedin-bullshit-detector.vercel.app/api/analyze',
   'https://linkedin-bullshit-detector.vercel.app/v1/analyze',
 ];
+const BASE_DAILY_LIMIT = 10;
+const ELEVATED_DAILY_LIMIT = 50;
+const DAILY_USAGE_STORAGE_KEY = 'dailyUsageState';
 
 const LOADING_MESSAGES = [
   "Extracting profile data...",
@@ -187,6 +190,85 @@ function normalizeAnalysis(rawAnalysis, profileText) {
   };
 }
 
+function getUtcDayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function readDailyUsageState() {
+  const currentDay = getUtcDayKey();
+  const stored = await browserAPI.storage.local.get(DAILY_USAGE_STORAGE_KEY);
+  const state = stored?.[DAILY_USAGE_STORAGE_KEY];
+
+  if (
+    !state ||
+    state.day !== currentDay ||
+    !Number.isInteger(state.count) ||
+    state.count < 0
+  ) {
+    return { day: currentDay, count: 0, elevated: false };
+  }
+
+  return {
+    day: state.day,
+    count: state.count,
+    elevated: Boolean(state.elevated),
+  };
+}
+
+async function writeDailyUsageState(state) {
+  await browserAPI.storage.local.set({
+    [DAILY_USAGE_STORAGE_KEY]: {
+      day: state.day,
+      count: state.count,
+      elevated: Boolean(state.elevated),
+    },
+  });
+}
+
+async function checkLocalDailyAllowance() {
+  const state = await readDailyUsageState();
+  const limit = state.elevated ? ELEVATED_DAILY_LIMIT : BASE_DAILY_LIMIT;
+
+  if (state.count < limit) {
+    return {
+      allowed: true,
+      state,
+      limit,
+      limitPassword: '',
+    };
+  }
+
+  if (!state.elevated) {
+    const password = window.prompt('Daily limit reached (10/day). Enter admin password to unlock 50/day:');
+    if (password && password.trim()) {
+      return {
+        allowed: true,
+        state,
+        limit: ELEVATED_DAILY_LIMIT,
+        limitPassword: password.trim(),
+      };
+    }
+  }
+
+  return {
+    allowed: false,
+    state,
+    limit,
+    limitPassword: '',
+  };
+}
+
+async function recordSuccessfulDailyAnalysis(usedAdminPassword) {
+  const state = await readDailyUsageState();
+  const next = {
+    day: state.day,
+    count: state.count + 1,
+    elevated: state.elevated || Boolean(usedAdminPassword),
+  };
+  await writeDailyUsageState(next);
+  return next;
+}
+
 let notLinkedin;
 let mainScreen;
 let profileUrl;
@@ -290,6 +372,18 @@ async function handleAnalyzeClick() {
     return;
   }
 
+  let localLimitPassword = '';
+  try {
+    const localAllowance = await checkLocalDailyAllowance();
+    if (!localAllowance.allowed) {
+      showError(`Daily limit reached (${localAllowance.limit}/day). It resets tomorrow (UTC).`);
+      return;
+    }
+    localLimitPassword = localAllowance.limitPassword;
+  } catch (_e) {
+    // If local storage is unavailable, server-side limiting still applies.
+  }
+
   analyzeBtn.disabled      = true;
   loadingDiv.style.display = 'block';
 
@@ -300,14 +394,16 @@ async function handleAnalyzeClick() {
 
   try {
     let analysis;
+    let usedAdminPassword = Boolean(localLimitPassword);
 
     try {
-      analysis = await callSecureAnalyzeApi(currentProfileData);
+      analysis = await callSecureAnalyzeApi(currentProfileData, localLimitPassword);
     } catch (e) {
       if (e?.status === 429 && e?.canUpgrade) {
         const adminPassword = window.prompt('Daily limit reached (10/day). Enter admin password to unlock 50/day:');
         if (adminPassword && adminPassword.trim()) {
           analysis = await callSecureAnalyzeApi(currentProfileData, adminPassword.trim());
+          usedAdminPassword = true;
         } else {
           throw e;
         }
@@ -317,6 +413,9 @@ async function handleAnalyzeClick() {
     }
 
     currentAnalysis = analysis;
+    try {
+      await recordSuccessfulDailyAnalysis(usedAdminPassword);
+    } catch (_e) {}
     clearInterval(interval);
     loadingDiv.style.display = 'none';
     renderResults(analysis);
