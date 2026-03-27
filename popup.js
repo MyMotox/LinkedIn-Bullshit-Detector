@@ -1,5 +1,8 @@
 const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
-const ANALYSIS_API_URL = 'https://linkedin-bullshit-detector.vercel.app/api/analyze';
+const ANALYSIS_API_URLS = [
+  'https://linkedin-bullshit-detector.vercel.app/api/analyze',
+  'https://linkedin-bullshit-detector.vercel.app/v1/analyze',
+];
 
 const LOADING_MESSAGES = [
   "Extracting profile data...",
@@ -35,11 +38,10 @@ const CATEGORIES = {
 };
 
 function scoreColor(s) {
-  if (s <= 20) return '#34d399';
-  if (s <= 45) return '#fbbf24';
-  if (s <= 65) return '#f97316';
-  if (s <= 85) return '#ef4444';
-  return '#a21caf';
+  if (s > 75) return '#ef4444';
+  if (s > 50) return '#f97316';
+  if (s > 25) return '#fbbf24';
+  return '#34d399';
 }
 
 function scoreVerdict(s) {
@@ -73,7 +75,8 @@ function computeBullshitAverage(subScores = {}) {
   const hype = clampScore(subScores.hype);
   const titrepompeux = clampScore(subScores.titrepompeux);
   const substance = clampScore(subScores.substance);
-  return Math.round(((jargon + hype + titrepompeux + substance) / 4) * 10) / 10;
+  const reducedBySubstance = 100 - substance;
+  return Math.round(((jargon + hype + titrepompeux + reducedBySubstance) / 4) * 10) / 10;
 }
 
 function isLikelyLinkedInUiText(text) {
@@ -337,25 +340,57 @@ async function callSecureAnalyzeApi(profile, limitPassword = '') {
     payload.limitPassword = limitPassword;
   }
 
-  const res = await fetch(ANALYSIS_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
+  let lastError = null;
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    const error = new Error(err?.error || err?.message || `HTTP ${res.status}`);
-    error.status = res.status;
-    error.canUpgrade = Boolean(err?.canUpgrade);
-    error.payload = err;
-    throw error;
+  for (const url of ANALYSIS_API_URLS) {
+    try {
+      const data = await postJsonWithTimeout(url, payload, 20000);
+      return normalizeAnalysis(data, profileText);
+    } catch (err) {
+      // Keep going for network-level errors, but stop on API errors.
+      if (err && typeof err.status === 'number') throw err;
+      lastError = err;
+    }
   }
 
-  const data = await res.json();
-  return normalizeAnalysis(data, profileText);
+  throw lastError || new Error('Network request failed for all API endpoints');
+}
+
+async function postJsonWithTimeout(url, payload, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const error = new Error(err?.error || err?.message || `HTTP ${res.status}`);
+      error.status = res.status;
+      error.canUpgrade = Boolean(err?.canUpgrade);
+      error.payload = err;
+      throw error;
+    }
+
+    return await res.json();
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error(`Request timeout (${timeoutMs}ms) to ${url}`);
+    }
+    if (error instanceof TypeError) {
+      throw new Error(`Network request failed to ${url}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function formatProfile(d) {
